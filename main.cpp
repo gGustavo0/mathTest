@@ -60,9 +60,11 @@ Teacher::~Teacher() {
     for (auto & i : table) {
         delete(i);
     }
+    delete(&table);
     for (int i = 0; i < letterQueue.size(); ++i) {
         delete(letterQueue.front());
     }
+    delete(&letterQueue);
 }
 void Teacher::receiveLetter(Letter *letter){
     letterQueue.push(letter);
