@@ -25,20 +25,20 @@ void fileError() {
 
 struct Roots { double x1, x2; };
 struct Coefficients { double a, b, c; };
-struct TableRow { string name; int amountOfSolvedProblems; };
-struct Letter { Coefficients equation{}; Roots roots{}; string name; };
+struct TableRow { string &name; int amountOfSolvedProblems; };
+struct Letter {
+    Letter(Coefficients &equation, Roots &roots, string &name):equation(equation), roots(roots), name(name){}
+    Coefficients &equation; Roots &roots; string &name;
+};
 
 class Solver {
     void discriminant();
-
     double discriminantValue{};
     Coefficients coefficients{};
 
 public:
     explicit Solver(Coefficients);
-
     void solve();
-
     Roots roots{};
     RootsType state;
 };
@@ -50,12 +50,18 @@ class Teacher {
     queue<Letter*> letterQueue;
 public:
     ~Teacher();
+    void createTasks(const string&);
     void receiveLetter(Letter*);
     void checkAll();
     void publishTable();
+    vector<Coefficients*> tasks;
 };
 
 Teacher::~Teacher() {
+    for (auto & i : tasks) {
+        delete(i);
+    }
+    delete(&tasks);
     delete(solver);
     for (auto & i : table) {
         delete(i);
@@ -66,6 +72,22 @@ Teacher::~Teacher() {
     }
     delete(&letterQueue);
 }
+
+void Teacher::createTasks(const string &path){
+    ifstream in(path);
+    if(! in.is_open()) fileError();
+    string c = " ";
+    double t;
+    in >> t;
+    while(in >> t){
+        auto *tc = new Coefficients{t, -1, -1};
+        in >> tc->b;
+        in >> tc->c;
+        tasks.push_back(tc);
+    }
+    in.close();
+}
+
 void Teacher::receiveLetter(Letter *letter){
     letterQueue.push(letter);
 }
@@ -100,33 +122,18 @@ void Teacher::publishTable() {
 class Student {
 protected:
     Solver *solver{};
-    Letter *letter;
     string name;
-    static Coefficients* read(const string&);
     Roots* solve(Coefficients&);
 public:
     ~Student();
-    explicit Student(const string&);
-    void sendLetter(Teacher*);
+    explicit Student(string const& );
 };
 Student::~Student() {
     delete(solver);
-    delete(letter);
 }
 
-Student::Student(const string& name):name(name){
-    letter = new Letter;
-    letter->name = name;
-}
+Student::Student(string const &name):name(name){}
 
-Coefficients* Student::read(const string& path) {
-    auto *coefficients = new Coefficients();
-    ifstream in(path);
-    if (in.is_open()) in >> coefficients->a >> coefficients->b >> coefficients->c;
-    else fileError();
-    in.close();
-    return coefficients;
-}
 
 Roots* Student::solve(Coefficients &coefficients) {
     solver = new Solver(coefficients);
@@ -138,52 +145,51 @@ Roots* Student::solve(Coefficients &coefficients) {
     return roots;
 }
 
-void Student::sendLetter(Teacher *teacher) {
-    teacher->receiveLetter(letter);
-}
-
 class BadStudent : public Student {
 public:
     explicit BadStudent(const string &name) : Student(name) {}
-    void createLetter(const string&);
+    void solveTest(Teacher*);
 };
 
-
-
-void BadStudent::createLetter(const string& path) {
-    letter->equation = *read(path);
-    letter->roots = *(new Roots{ 0, 0 });
+void BadStudent::solveTest(Teacher *teacher) {
+    for(int i = 0; i < teacher->tasks.size(); i++){
+        auto *letter = new Letter(*(teacher->tasks[i]), *(new Roots{0, 0}), name);
+        teacher->receiveLetter(letter);
+    }
 }
 
 class GoodStudent : public Student {
 public:
     explicit GoodStudent(const string &name) : Student(name) {}
-    void createLetter(const string&);
+    void solveTest(Teacher *teacher);
 };
 
-void GoodStudent::createLetter(const string& path) {
-    letter->equation = *read(path);
-    letter->roots = *solve(letter->equation);
+void GoodStudent::solveTest(Teacher *teacher) {
+    for(int i = 0; i < teacher->tasks.size(); i++){
+        auto *letter = new Letter(*(teacher->tasks[i]), *(solve(*teacher->tasks[i])), name);
+        teacher->receiveLetter(letter);
+    }
 }
 
 class AverageStudent : public Student {
 public:
     explicit AverageStudent(const string &name) : Student(name) {}
-    void createLetter(const string&);
+    void solveTest(Teacher *teacher);
 };
 
-void AverageStudent::createLetter(const string& path) {
-    letter->equation = *read(path);
-    srand(clock() * time(nullptr));
-    if (rand() % 2){
-        letter->roots = *solve(letter->equation);
-    } else {
-        letter->roots = *(new Roots{0, 0});
+void AverageStudent::solveTest(Teacher *teacher) {
+    for(int i = 0; i < teacher->tasks.size(); i++){
+        Roots *roots;
+        srand(time(nullptr));
+        if (rand() % 2 == 1) roots = solve(*teacher->tasks[i]);
+        else roots = new Roots{0, 0};
+        teacher->receiveLetter(new Letter(*teacher->tasks[i], *roots, name));
     }
 }
 
 Solver::Solver(Coefficients coefficients) {
     this->coefficients = coefficients;
+    state = NO_REAL_ROOTS;
 }
 
 void Solver::discriminant() {
@@ -200,31 +206,19 @@ void Solver::solve() {
 }
 
 int main() {
-    auto *teacher = new Teacher();
-    auto *good = new GoodStudent("Ivan");
-    auto *bad = new BadStudent("Rahim");
-    auto *average = new AverageStudent("Gosha");
+    Teacher *teacher = new Teacher();
+    teacher->createTasks("input.txt");
 
-    good->createLetter("input.txt");
-    good->sendLetter(teacher);
-    good->createLetter("input1.txt");
-    good->sendLetter(teacher);
+    BadStudent *badGosha = new BadStudent("Gosha");
+    GoodStudent *goodArtur = new GoodStudent("Artur");
+    AverageStudent *averageIvan = new AverageStudent("Ivan");
 
-    average->createLetter("input.txt");
-    average->sendLetter(teacher);
-    average->createLetter("input1.txt");
-    average->sendLetter(teacher);
-    average->createLetter("input2.txt");
-    average->sendLetter(teacher);
-
-    bad->createLetter("input.txt");
-    bad->sendLetter(teacher);
-    bad->createLetter("input1.txt");
-    bad->sendLetter(teacher);
-    bad->createLetter("input2.txt");
-    bad->sendLetter(teacher);
+    badGosha->solveTest(teacher);
+    goodArtur->solveTest(teacher);
+    averageIvan->solveTest(teacher);
 
     teacher->checkAll();
     teacher->publishTable();
+
     return 0;
 }
